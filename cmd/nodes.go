@@ -4,10 +4,15 @@
 package cmd
 
 import (
+	"bufio"
+	"bytes"
 	"context"
+	"os/exec"
+	"strings"
 
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
@@ -88,4 +93,60 @@ func externalIP(node *apiv1.Node) string {
 	}
 	errlog.Fatalf("couuld not find external IP address for node %s", node.Name)
 	return ""
+}
+
+func findBlackholes(nodeName string) (sets.Set[string], error) {
+	dbglog.Printf("Looking up blackholes on node %s", nodeName)
+
+	res := sets.New[string]()
+
+	cmd := exec.Command(
+		"oc",
+		"debug",
+		"node/"+nodeName,
+		"--context",
+		targetContext,
+		"--",
+		"ip",
+		"route",
+	)
+
+	dbglog.Printf("Running command on node %s: %s", nodeName, cmd.Args)
+
+	out, err := cmd.Output()
+	if err != nil {
+		return res, err
+	}
+
+	scanner := bufio.NewScanner(bytes.NewReader(out))
+
+	for scanner.Scan() {
+		route := strings.SplitN(scanner.Text(), " ", 2)
+		if len(route) == 2 && route[0] == "blackhole" {
+			res.Insert(strings.Trim(route[1], " "))
+		}
+	}
+	if err = scanner.Err(); err != nil {
+		return res, err
+	}
+
+	return res, nil
+}
+
+func execScript(nodeName string, script string) ([]byte, error) {
+	cmd := exec.Command(
+		"oc",
+		"debug",
+		"node/"+nodeName,
+		"--context",
+		targetContext,
+		"--",
+		"sh",
+		"-c",
+		script,
+	)
+
+	dbglog.Printf("Running command on node %s: %s", nodeName, cmd.Args)
+
+	return cmd.Output()
 }

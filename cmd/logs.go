@@ -1,4 +1,4 @@
-// SPDX-FileCopyrightText: The RamenDR authors
+// SPDX-FileCopyrightText: The oc-blackhole authors
 // SPDX-License-Identifier: Apache-2.0
 
 package cmd
