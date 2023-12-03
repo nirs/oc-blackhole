@@ -6,6 +6,8 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"net"
+	"net/url"
 
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -15,10 +17,11 @@ import (
 )
 
 type BlockedCluster struct {
-	Context       string
-	NodeAddresses []string
-	config        *api.Config
-	client        *kubernetes.Clientset
+	Context            string
+	NodeAddresses      []string
+	APIServerAddresses []string
+	config             *api.Config
+	client             *kubernetes.Clientset
 }
 
 type TargetCluster struct {
@@ -41,6 +44,11 @@ func (c *BlockedCluster) Inspect() error {
 	var err error
 
 	c.NodeAddresses, err = c.findNodesAddresses()
+	if err != nil {
+		return err
+	}
+
+	c.APIServerAddresses, err = c.findAPIServerAddress()
 	if err != nil {
 		return err
 	}
@@ -80,6 +88,30 @@ func externalIP(node *apiv1.Node) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("couuld not find external IP address for node %s", node.Name)
+}
+
+func (c *BlockedCluster) findAPIServerAddress() ([]string, error) {
+	cluster, ok := c.config.Clusters[c.Context]
+	if !ok {
+		return nil, fmt.Errorf("no cluster for context %q", c.Context)
+	}
+
+	server, err := url.Parse(cluster.Server)
+	if err != nil {
+		return nil, fmt.Errorf("cannnot parse cluster %q server URL %q", c.Context, cluster.Server)
+	}
+
+	ips, err := net.LookupIP(server.Host)
+	if err != nil {
+		return nil, err
+	}
+
+	var res []string
+	for _, ip := range ips {
+		res = append(res, ip.String())
+	}
+
+	return res, nil
 }
 
 func NewTargetCluster(config *api.Config, context string) (*TargetCluster, error) {
