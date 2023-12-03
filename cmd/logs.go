@@ -4,18 +4,21 @@
 package cmd
 
 import (
+	"io"
 	"log"
 	"os"
 )
 
-type verboseWriter struct{}
+type verboseWriter struct {
+	writer io.Writer
+}
 
 func (w verboseWriter) Write(b []byte) (int, error) {
 	if verbose {
-		return os.Stdout.Write(b)
+		return w.writer.Write(b)
 	}
 	return len(b), nil
 }
 
-var dbglog = log.New(verboseWriter{}, "", 0)
+var dbglog = log.New(verboseWriter{os.Stdout}, "", 0)
 var errlog = log.New(os.Stderr, "", 0)
