@@ -63,33 +63,27 @@ func deleteBlackholeRoutes(context string, nodeName string, addresses []string) 
 func findBlackholeRoutes(context string, nodeName string) (sets.Set[string], error) {
 	dbglog.Printf("Looking up blackholes on node %s", nodeName)
 
-	res := sets.New[string]()
+	// `ip route replace` and `ip route del` handle both ipv4 and ipv6 routes,
+	// but `ip route show` return only ipv4 routes.
 
-	cmd := exec.Command(
-		"oc",
-		"debug",
-		"node/"+nodeName,
-		"--context",
-		context,
-		"--",
-		"ip",
-		"route",
-	)
-
-	dbglog.Printf("Running command on node %s: %s", nodeName, cmd.Args)
-
-	out, err := cmd.Output()
+	script := `
+	ip -4 route show type blackhole
+	ip -6 route show type blackhole
+	`
+	out, err := execScript(context, nodeName, script)
 	if err != nil {
-		return res, err
+		return nil, err
 	}
 
+	res := sets.New[string]()
 	scanner := bufio.NewScanner(bytes.NewReader(out))
 
 	for scanner.Scan() {
-		route := strings.SplitN(scanner.Text(), " ", 2)
-		if len(route) == 2 && route[0] == "blackhole" {
-			res.Insert(strings.Trim(route[1], " "))
-		}
+		// We want the second field
+		// - ipv4: "blackhole 172.217.22.14 "
+		// - ipv6: "blackhole 2a00:1450:4028:809::200e dev lo metric 1024 pref medium "
+		route := strings.SplitN(scanner.Text(), " ", 3)
+		res.Insert(route[1])
 	}
 	if err = scanner.Err(); err != nil {
 		return res, err
