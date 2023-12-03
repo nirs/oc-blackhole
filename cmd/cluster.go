@@ -11,6 +11,7 @@ import (
 
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
@@ -54,6 +55,14 @@ func (c *BlockedCluster) Inspect() error {
 	}
 
 	return nil
+}
+
+// AllAddresses return sorted list of uniqe cluster address that must be blocked
+// on the target cluster.
+func (c *BlockedCluster) AllAddresses() []string {
+	res := sets.New(c.NodeAddresses...)
+	res.Insert(c.APIServerAddresses...)
+	return sets.List(res)
 }
 
 func (c *BlockedCluster) findNodesAddresses() ([]string, error) {
