@@ -66,12 +66,12 @@ func (c *BlockedCluster) AllAddresses() []string {
 }
 
 func (c *BlockedCluster) findNodesAddresses() ([]string, error) {
-	var res []string
-
 	nodes, err := c.client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
+
+	var res []string
 
 	for _, node := range nodes.Items {
 		address, err := externalIP(&node)
