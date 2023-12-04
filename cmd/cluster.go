@@ -22,22 +22,23 @@ type BlockedCluster struct {
 	NodeAddresses      []string
 	APIServerAddresses []string
 	config             *api.Config
-	client             *kubernetes.Clientset
+	k8sClient          *kubernetes.Clientset
 }
 
 type TargetCluster struct {
 	Context   string
 	NodeNames []string
 	config    *api.Config
-	client    *kubernetes.Clientset
+	k8sClient *kubernetes.Clientset
 }
 
 func NewBlockedCluster(config *api.Config, context string) (*BlockedCluster, error) {
-	client, err := clientForContext(config, context)
+	k8sClient, err := createK8sClient(config, context)
 	if err != nil {
 		return nil, err
 	}
-	cluster := &BlockedCluster{Context: context, config: config, client: client}
+
+	cluster := &BlockedCluster{Context: context, config: config, k8sClient: k8sClient}
 	return cluster, nil
 }
 
@@ -66,7 +67,7 @@ func (c *BlockedCluster) AllAddresses() []string {
 }
 
 func (c *BlockedCluster) findNodesAddresses() ([]string, error) {
-	nodes, err := c.client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
+	nodes, err := c.k8sClient.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -132,11 +133,12 @@ func (c *BlockedCluster) findAPIServerAddress() ([]string, error) {
 }
 
 func NewTargetCluster(config *api.Config, context string) (*TargetCluster, error) {
-	client, err := clientForContext(config, context)
+	k8sClient, err := createK8sClient(config, context)
 	if err != nil {
 		return nil, err
 	}
-	cluster := &TargetCluster{Context: context, config: config, client: client}
+
+	cluster := &TargetCluster{Context: context, config: config, k8sClient: k8sClient}
 	return cluster, nil
 }
 
@@ -154,7 +156,7 @@ func (c *TargetCluster) Inspect() error {
 func (c *TargetCluster) findNodeNames() ([]string, error) {
 	var res []string
 
-	nodes, err := c.client.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
+	nodes, err := c.k8sClient.CoreV1().Nodes().List(context.TODO(), metav1.ListOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -170,15 +172,11 @@ func (c *TargetCluster) findNodeNames() ([]string, error) {
 	return res, nil
 }
 
-func clientForContext(kubeconfig *api.Config, context string) (*kubernetes.Clientset, error) {
-	config := clientcmd.NewNonInteractiveClientConfig(*kubeconfig, context, nil, nil)
-	clientConfig, err := config.ClientConfig()
+func createK8sClient(config *api.Config, context string) (*kubernetes.Clientset, error) {
+	rc, err := clientcmd.NewNonInteractiveClientConfig(*config, context, nil, nil).ClientConfig()
 	if err != nil {
 		return nil, err
 	}
-	client, err := kubernetes.NewForConfig(clientConfig)
-	if err != nil {
-		return nil, err
-	}
-	return client, nil
+
+	return kubernetes.NewForConfig(rc)
 }
