@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/url"
 
+	routev1 "github.com/openshift/client-go/route/clientset/versioned/typed/route/v1"
 	apiv1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -21,8 +22,10 @@ type BlockedCluster struct {
 	Context            string
 	NodeAddresses      []string
 	APIServerAddresses []string
+	RouteAddresses     []string
 	config             *api.Config
 	k8sClient          *kubernetes.Clientset
+	routeClient        *routev1.RouteV1Client
 }
 
 type TargetCluster struct {
@@ -38,7 +41,17 @@ func NewBlockedCluster(config *api.Config, context string) (*BlockedCluster, err
 		return nil, err
 	}
 
-	cluster := &BlockedCluster{Context: context, config: config, k8sClient: k8sClient}
+	routeClient, err := createRouteClient(config, context)
+	if err != nil {
+		return nil, err
+	}
+
+	cluster := &BlockedCluster{
+		Context:     context,
+		config:      config,
+		k8sClient:   k8sClient,
+		routeClient: routeClient,
+	}
 	return cluster, nil
 }
 
@@ -55,6 +68,11 @@ func (c *BlockedCluster) Inspect() error {
 		return err
 	}
 
+	c.RouteAddresses, err = c.findRouteAddresses()
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -63,6 +81,7 @@ func (c *BlockedCluster) Inspect() error {
 func (c *BlockedCluster) AllAddresses() []string {
 	res := sets.New(c.NodeAddresses...)
 	res.Insert(c.APIServerAddresses...)
+	res.Insert(c.RouteAddresses...)
 	return sets.List(res)
 }
 
@@ -132,6 +151,38 @@ func (c *BlockedCluster) findAPIServerAddress() ([]string, error) {
 	return res, nil
 }
 
+func (c *BlockedCluster) findRouteAddresses() ([]string, error) {
+	routes, err := c.routeClient.Routes("").List(context.TODO(), metav1.ListOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	res := sets.New[string]()
+
+	for _, route := range routes.Items {
+		for i, ingress := range route.Status.Ingress {
+			if ingress.Host == "" {
+				dbglog.Printf("skipping route %s: ingress[%v]: host not available",
+					route.Name, i)
+				continue
+			}
+
+			ips, err := net.LookupIP(ingress.Host)
+			if err != nil {
+				return nil, err
+			}
+
+			for _, ip := range ips {
+				dbglog.Printf("found blocked cluster route %s host %s address %s",
+					route.Name, ingress.Host, ip)
+				res.Insert(ip.String())
+			}
+		}
+	}
+
+	return res.UnsortedList(), nil
+}
+
 func NewTargetCluster(config *api.Config, context string) (*TargetCluster, error) {
 	k8sClient, err := createK8sClient(config, context)
 	if err != nil {
@@ -179,4 +230,13 @@ func createK8sClient(config *api.Config, context string) (*kubernetes.Clientset,
 	}
 
 	return kubernetes.NewForConfig(rc)
+}
+
+func createRouteClient(config *api.Config, context string) (*routev1.RouteV1Client, error) {
+	rc, err := clientcmd.NewNonInteractiveClientConfig(*config, context, nil, nil).ClientConfig()
+	if err != nil {
+		return nil, err
+	}
+
+	return routev1.NewForConfig(rc)
 }
