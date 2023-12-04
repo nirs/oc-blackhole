@@ -38,6 +38,30 @@ oc blackhole unblock cluster1 --context cluster2
 
 ## How a blackholed cluster looks like
 
+Accessing the API server from the target host will fail:
+
+```sh
+$ oc cluster-info --context cluster2
+Kubernetes control plane is running at https://api.perf2.example.com:6443
+
+$ oc debug node/perf3-lhps4-acm-0-5jdjh -- curl --silent --show-error \
+    https://api.perf2.example.com:6443 2>/dev/null
+curl: (7) Couldn't connect to server
+```
+
+Accessing route on the blocked cluster will fail:
+
+```sh
+$ oc get route s3 -n openshift-storage --context cluster2
+NAME   HOST/PORT                                     PATH   SERVICES   PORT       TERMINATION       WILDCARD
+s3     s3-openshift-storage.apps.perf2.example.com          s3         s3-https   reencrypt/Allow   None
+
+$ oc debug node/perf3-lhps4-acm-0-5jdjh -- curl curl --silent --show-error \
+    https://s3-openshift-storage.apps.perf2.example.com/odrbucket-b1b922184baf/ 2>/dev/null
+curl: (6) Could not resolve host: curl
+curl: (7) Couldn't connect to server
+```
+
 When using OCM, it will report the cluster availability as `Unknown`:
 
 ```sh
@@ -74,9 +98,9 @@ images: 1 total
 
 ## What's going on under the hood
 
-When we blackhole a cluster, we get the cluster node addresses, and add
-a `blackhole` ip route entry for every address on every node of the
-target cluster.
+When we blackhole a cluster, we get the cluster node addresses, api
+server address, and route addresses, and add a `blackhole` ip route
+entry for every address on every node of the target cluster.
 
 ```sh
 $ oc get nodes --context hub
@@ -88,9 +112,7 @@ perf3-lhps4-master-0      Ready    control-plane,master   9d    v1.27.6+f67aeb3
 perf3-lhps4-master-1      Ready    control-plane,master   9d    v1.27.6+f67aeb3
 perf3-lhps4-master-2      Ready    control-plane,master   9d    v1.27.6+f67aeb3
 
-$ oc debug node/perf3-lhps4-acm-0-vzrq2 -- sh -c 'ip route | grep ^blackhole'
-Starting pod/perf3-lhps4-acm-0-vzrq2-debug ...
-To use host binaries, run `chroot /host`
+$ oc debug node/perf3-lhps4-acm-0-vzrq2 -- ip route show type blackhole
 blackhole 10.70.56.101
 blackhole 10.70.56.149
 blackhole 10.70.56.168
@@ -98,15 +120,8 @@ blackhole 10.70.56.176
 blackhole 10.70.56.187
 blackhole 10.70.56.212
 
-Removing debug pod ...
-
 $ oc debug node/perf3-lhps4-acm-0-vzrq2 -- ping 10.70.56.168
-Starting pod/perf3-lhps4-acm-0-vzrq2-debug ...
-To use host binaries, run `chroot /host`
 connect: Invalid argument
-
-Removing debug pod ...
-error: non-zero exit code from debug container
 ```
 
 Unlocking the cluster delete the `blackhole` route entries.
