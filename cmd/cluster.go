@@ -100,9 +100,14 @@ func externalIP(node *apiv1.Node) (string, error) {
 }
 
 func (c *BlockedCluster) findAPIServerAddress() ([]string, error) {
-	cluster, ok := c.config.Clusters[c.Context]
+	context, ok := c.config.Contexts[c.Context]
 	if !ok {
-		return nil, fmt.Errorf("no cluster for context %q", c.Context)
+		return nil, fmt.Errorf("could not find context %q", c.Context)
+	}
+
+	cluster, ok := c.config.Clusters[context.Cluster]
+	if !ok {
+		return nil, fmt.Errorf("could not find cluster %q", context.Cluster)
 	}
 
 	server, err := url.Parse(cluster.Server)
@@ -110,13 +115,14 @@ func (c *BlockedCluster) findAPIServerAddress() ([]string, error) {
 		return nil, fmt.Errorf("cannnot parse cluster %q server URL %q", c.Context, cluster.Server)
 	}
 
-	ips, err := net.LookupIP(server.Host)
+	ips, err := net.LookupIP(server.Hostname())
 	if err != nil {
 		return nil, err
 	}
 
 	var res []string
 	for _, ip := range ips {
+		dbglog.Printf("found blocked cluster api server %s address %s", server.Hostname(), ip)
 		res = append(res, ip.String())
 	}
 
