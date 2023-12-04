@@ -64,7 +64,7 @@ func (c *Command) BlockCluster() error {
 	// TODO: Run in parallel
 
 	for _, nodeName := range c.Target.NodeNames {
-		err := addBlackholeRoutes(c.Target.Context, nodeName, c.Cluster.NodeAddresses)
+		err := addBlackholeRoutes(c.Target.Context, nodeName, c.Cluster.AllAddresses())
 		if err != nil {
 			return err
 		}
@@ -76,7 +76,7 @@ func (c *Command) UnblockCluster() error {
 	// TODO: Run in parallel
 
 	for _, nodeName := range c.Target.NodeNames {
-		err := deleteBlackholeRoutes(c.Target.Context, nodeName, c.Cluster.NodeAddresses)
+		err := deleteBlackholeRoutes(c.Target.Context, nodeName, c.Cluster.AllAddresses())
 		if err != nil {
 			return err
 		}
