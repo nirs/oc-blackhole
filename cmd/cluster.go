@@ -83,7 +83,7 @@ func (c *BlockedCluster) findNodesAddresses() ([]string, error) {
 		res = append(res, address)
 	}
 
-	if len(c.NodeAddresses) == 0 {
+	if len(res) == 0 {
 		return nil, fmt.Errorf("could not find any blocked cluster node addresses")
 	}
 
