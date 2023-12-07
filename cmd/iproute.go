@@ -4,8 +4,6 @@
 package cmd
 
 import (
-	"bufio"
-	"bytes"
 	"os/exec"
 	"strings"
 
@@ -76,17 +74,13 @@ func findBlackholeRoutes(context string, nodeName string) (sets.Set[string], err
 	}
 
 	res := sets.New[string]()
-	scanner := bufio.NewScanner(bytes.NewReader(out))
 
-	for scanner.Scan() {
+	for _, line := range strings.Split(string(out), "\n") {
 		// We want the second field
 		// - ipv4: "blackhole 172.217.22.14 "
 		// - ipv6: "blackhole 2a00:1450:4028:809::200e dev lo metric 1024 pref medium "
-		route := strings.SplitN(scanner.Text(), " ", 3)
-		res.Insert(route[1])
-	}
-	if err = scanner.Err(); err != nil {
-		return res, err
+		fields := strings.Fields(line)
+		res.Insert(fields[1])
 	}
 
 	return res, nil
