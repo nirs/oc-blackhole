@@ -10,6 +10,24 @@ import (
 	"k8s.io/client-go/tools/clientcmd/api"
 )
 
+type BlackholeStatus string
+
+const (
+	// None of cluster addresses are blocked in target cluster.
+	StatusUnblocked = BlackholeStatus("unblocked")
+
+	// All cluster addresses are blocked in target cluster.
+	StatusBlocked = BlackholeStatus("blocked")
+
+	// Some of cluster addresses are blocked in target cluster.
+	StatusPartlyBlocked = BlackholeStatus("partly-blocked")
+)
+
+type ClusterStatus struct {
+	Valid bool
+	Nodes map[string]BlackholeStatus
+}
+
 type Command struct {
 	Cluster *BlockedCluster
 	Target  *TargetCluster
@@ -88,6 +106,41 @@ func (c *Command) UnblockCluster() error {
 	}
 
 	return nil
+}
+
+func (c *Command) ClusterStatus() (*ClusterStatus, error) {
+	// TODO: Run in parallel
+
+	addresses := c.Cluster.AllAddresses()
+	status := &ClusterStatus{
+		Valid: true,
+		Nodes: map[string]BlackholeStatus{},
+	}
+	var lastStatus BlackholeStatus
+
+	for _, nodeName := range c.Target.NodeNames {
+		routes, err := findBlackholeRoutes(c.Target.Context, nodeName)
+		if err != nil {
+			return nil, err
+		}
+
+		if routes.HasAll(addresses...) {
+			status.Nodes[nodeName] = StatusBlocked
+		} else if routes.HasAny(addresses...) {
+			status.Nodes[nodeName] = StatusPartlyBlocked
+			status.Valid = false
+		} else {
+			status.Nodes[nodeName] = StatusUnblocked
+		}
+
+		if lastStatus != "" && lastStatus != status.Nodes[nodeName] {
+			status.Valid = false
+		}
+
+		lastStatus = status.Nodes[nodeName]
+	}
+
+	return status, nil
 }
 
 func validateContexts(blockedContext string, targeContext string) error {
