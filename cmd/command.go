@@ -63,24 +63,30 @@ func (c *Command) InspectClusters() error {
 func (c *Command) BlockCluster() error {
 	// TODO: Run in parallel
 
+	addresses := c.Cluster.AllAddresses()
+
 	for _, nodeName := range c.Target.NodeNames {
-		err := addBlackholeRoutes(c.Target.Context, nodeName, c.Cluster.AllAddresses())
+		err := addBlackholeRoutes(c.Target.Context, nodeName, addresses)
 		if err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
 func (c *Command) UnblockCluster() error {
 	// TODO: Run in parallel
 
+	addresses := c.Cluster.AllAddresses()
+
 	for _, nodeName := range c.Target.NodeNames {
-		err := deleteBlackholeRoutes(c.Target.Context, nodeName, c.Cluster.AllAddresses())
+		err := deleteBlackholeRoutes(c.Target.Context, nodeName, addresses)
 		if err != nil {
 			return err
 		}
 	}
+
 	return nil
 }
 
