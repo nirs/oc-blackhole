@@ -99,12 +99,12 @@ func (c *BlockedCluster) findNodesAddresses() ([]string, error) {
 			return nil, err
 		}
 
-		dbglog.Printf("found blocked cluster node %s address %s", node.Name, address)
+		dbglog.Printf("found node %s address %s", node.Name, address)
 		res = append(res, address)
 	}
 
 	if len(res) == 0 {
-		return nil, fmt.Errorf("could not find any blocked cluster node addresses")
+		return nil, fmt.Errorf("could not find any node address")
 	}
 
 	return res, nil
@@ -116,7 +116,7 @@ func externalIP(node *apiv1.Node) (string, error) {
 			return addr.Address, nil
 		}
 	}
-	return "", fmt.Errorf("couuld not find external IP address for node %s", node.Name)
+	return "", fmt.Errorf("could not find external IP address for node %s", node.Name)
 }
 
 func (c *BlockedCluster) findAPIServerAddress() ([]string, error) {
@@ -143,7 +143,7 @@ func (c *BlockedCluster) findAPIServerAddress() ([]string, error) {
 
 	var res []string
 	for _, ip := range ips {
-		dbglog.Printf("found blocked cluster api server %s address %s",
+		dbglog.Printf("found api server %s address %s",
 			server.Hostname(), ip)
 		res = append(res, ip.String())
 	}
@@ -173,7 +173,7 @@ func (c *BlockedCluster) findRouteAddresses() ([]string, error) {
 			}
 
 			for _, ip := range ips {
-				dbglog.Printf("found blocked cluster route %s host %s address %s",
+				dbglog.Printf("found route %s host %s address %s",
 					route.Name, ingress.Host, ip)
 				res.Insert(ip.String())
 			}
@@ -217,7 +217,7 @@ func (c *TargetCluster) findNodeNames() ([]string, error) {
 	}
 
 	if len(res) == 0 {
-		return nil, fmt.Errorf("could not find any target cluster node")
+		return nil, fmt.Errorf("could not find any node")
 	}
 
 	return res, nil
