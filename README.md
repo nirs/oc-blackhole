@@ -28,7 +28,7 @@ oc blackhole block cluster1 --contexts hub,cluster2
 
 Now can test how the system handles the unreachable cluster.
 
-When done, we can make the cluster available again:
+When done, we can make the cluster reachable again:
 
 ```sh
 oc blackhole unblock cluster1 --contexts hub,cluster2
@@ -86,7 +86,7 @@ $ oc debug node/perf3-lhps4-acm-0-5jdjh -- curl --silent --show-error \
 curl: (7) Couldn't connect to server
 ```
 
-Accessing route on the blocked cluster will fail:
+Accessing routes on the blocked cluster will fail:
 
 ```sh
 $ oc get route s3 -n openshift-storage --context cluster2
@@ -99,7 +99,7 @@ curl: (6) Could not resolve host: curl
 curl: (7) Couldn't connect to server
 ```
 
-When using OCM, it will report the cluster availability as `Unknown`:
+When using OCM, it will report the cluster availability as `Unknown` after few minutes:
 
 ```sh
 $ oc get managedclusters --context hub
@@ -109,7 +109,8 @@ cluster2        true           https://api.perf2.example.com:6443   True     Tru
 local-cluster   true           https://api.perf3.example.com:6443   True     True        8d
 ```
 
-Workloads trying to access the cluster will fail:
+When using Rook Ceph pool configured for RBD mirroring, the `dr health` command
+will fail:
 
 ```sh
 $ oc rook-ceph -n openshift-storage --context cluster2 dr health
@@ -121,7 +122,7 @@ timed out
 Warning: failed to get ceph status from peer cluster, please check for network issues between the clusters
 ```
 
-Or report warning status:
+Ceph status will report `WARNING` health:
 
 ```sh
 $ oc rook-ceph -n openshift-storage --context cluster2 \
