@@ -117,5 +117,13 @@ func execScript(context string, nodeName string, script string) ([]byte, error) 
 
 	dbglog.Printf("Running command on node %s: %s", nodeName, cmd.Args)
 
-	return cmd.Output()
+	out, err := cmd.Output()
+	if err != nil {
+		// Due to the way `oc debug` is implemented, stdrrr of the underlying
+		// commnad is redirected to stdout.
+		// https://bugzilla.redhat.com/1771549
+		return nil, fmt.Errorf("oc debug failed: %s: %s", err, out)
+	}
+
+	return out, nil
 }
