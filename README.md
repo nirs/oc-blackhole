@@ -34,6 +34,45 @@ When done, we can make the cluster available again:
 oc blackhole unblock cluster1 --contexts hub,cluster2
 ```
 
+To inspect the status of the cluster:
+
+```sh
+$ oc blackhole show cluster1 --contexts hub,cluster2
+status:
+  cluster: cluster1
+  targets:
+    - name: hub
+      valid: true
+      nodes:
+        - name: perf1-d8zsg-master-0
+          status: unblocked
+        - name: perf1-d8zsg-master-1
+          status: unblocked
+        - name: perf1-d8zsg-master-2
+          status: unblocked
+        - name: perf1-d8zsg-ocs-0-6nzrx
+          status: unblocked
+        - name: perf1-d8zsg-ocs-0-kd5xq
+          status: unblocked
+        - name: perf1-d8zsg-ocs-0-wl7cn
+          status: unblocked
+    - name: cluster2
+      valid: true
+      nodes:
+        - name: perf3-xxkb8-master-0
+          status: unblocked
+        - name: perf3-xxkb8-master-1
+          status: unblocked
+        - name: perf3-xxkb8-master-2
+          status: unblocked
+        - name: perf3-xxkb8-ocs-0-2gvdz
+          status: unblocked
+        - name: perf3-xxkb8-ocs-0-hwb29
+          status: unblocked
+        - name: perf3-xxkb8-ocs-0-nj2z5
+          status: unblocked
+```
+
 ## How a blackholed cluster looks like
 
 Accessing the API server from the target host will fail:
