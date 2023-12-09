@@ -10,15 +10,15 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-var targetContext string
+var targetContexts []string
 var kubeconfig string
 var verbose bool
 
-var example = `  # Make cluster 'foo' unreachable from cluster 'bar':
-  oc blackhole block foo --context bar
+var example = `  # Make cluster 'foo' unreachable from clusters 'bar' and 'baz':
+  oc blackhole block foo --contexts bar,baz
 
-  # Make cluster 'foo' reachable again from cluster 'bar'
-  oc backhole unblock foo --context bar
+  # Make cluster 'foo' reachable again from clusters 'bar' and 'baz':
+  oc backhole unblock foo --contexts bar,baz
 `
 var rootCmd = &cobra.Command{
 	Use:     "oc-blackhole",
@@ -45,7 +45,10 @@ func defaultKubeconfig() string {
 }
 
 func init() {
-	rootCmd.PersistentFlags().StringVar(&targetContext, "context", "", "The name of the kubeconfig context to use")
-	rootCmd.PersistentFlags().StringVarP(&kubeconfig, "kubeconfig", "", defaultKubeconfig(), "kubeconfig file")
-	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "be more verbose")
+	rootCmd.PersistentFlags().StringSliceVar(&targetContexts, "contexts", []string{},
+		"the kubeconfig contexts of the target clusters")
+	rootCmd.PersistentFlags().StringVar(&kubeconfig, "kubeconfig", defaultKubeconfig(),
+		"the kubeconfig file to use")
+	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false,
+		"be more verbose")
 }

@@ -17,7 +17,7 @@ var showCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		blockedContext := args[0]
 
-		c, err := NewCommand(blockedContext, targetContext, kubeconfig)
+		c, err := NewCommand(blockedContext, targetContexts, kubeconfig)
 		if err != nil {
 			errlog.Fatal(err)
 		}
@@ -34,12 +34,15 @@ var showCmd = &cobra.Command{
 
 		fmt.Printf("status:\n")
 		fmt.Printf("  cluster: %q\n", blockedContext)
-		fmt.Printf("  target: %q\n", targetContext)
-		fmt.Printf("  valid: %v\n", status.Valid)
-		fmt.Printf("  nodes:\n")
-		for _, name := range sortedKeys(status.Nodes) {
-			fmt.Printf("    - name: %q\n", name)
-			fmt.Printf("      status: %q\n", status.Nodes[name])
+		fmt.Printf("  targets:\n")
+		for targetName, targetStatus := range status {
+			fmt.Printf("    - name: %s\n", targetName)
+			fmt.Printf("      valid: %v\n", targetStatus.Valid)
+			fmt.Printf("      nodes:\n")
+			for _, nodeName := range sortedKeys(targetStatus.Nodes) {
+				fmt.Printf("        - name: %q\n", nodeName)
+				fmt.Printf("          status: %q\n", targetStatus.Nodes[nodeName])
+			}
 		}
 	},
 }

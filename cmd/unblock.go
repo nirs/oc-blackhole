@@ -14,7 +14,7 @@ var unblockCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		blockedContext := args[0]
 
-		c, err := NewCommand(blockedContext, targetContext, kubeconfig)
+		c, err := NewCommand(blockedContext, targetContexts, kubeconfig)
 		if err != nil {
 			errlog.Fatal(err)
 		}

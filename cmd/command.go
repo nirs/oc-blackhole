@@ -6,6 +6,7 @@ package cmd
 import (
 	"fmt"
 
+	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/clientcmd/api"
 )
@@ -27,16 +28,15 @@ type ClusterStatus struct {
 	Valid bool
 	Nodes map[string]BlackholeStatus
 }
-
 type Command struct {
 	Cluster *BlockedCluster
-	Target  *TargetCluster
+	Targets []*TargetCluster
 }
 
-func NewCommand(blockedContext string, targetContext string, kubeconfig string) (*Command, error) {
+func NewCommand(blockedContext string, targetContexts []string, kubeconfig string) (*Command, error) {
 	var err error
 
-	err = validateContexts(blockedContext, targetContext)
+	err = validateContexts(blockedContext, targetContexts)
 	if err != nil {
 		return nil, err
 	}
@@ -51,12 +51,17 @@ func NewCommand(blockedContext string, targetContext string, kubeconfig string) 
 		return nil, err
 	}
 
-	target, err := NewTargetCluster(config, targetContext)
-	if err != nil {
-		return nil, err
+	var targets []*TargetCluster
+	for _, target := range targetContexts {
+		target, err := NewTargetCluster(config, target)
+		if err != nil {
+			return nil, err
+		}
+
+		targets = append(targets, target)
 	}
 
-	command := &Command{Cluster: cluster, Target: target}
+	command := &Command{Cluster: cluster, Targets: targets}
 	return command, nil
 }
 
@@ -70,9 +75,11 @@ func (c *Command) InspectClusters() error {
 		return err
 	}
 
-	err = c.Target.Inspect()
-	if err != nil {
-		return err
+	for _, target := range c.Targets {
+		err = target.Inspect()
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -83,10 +90,12 @@ func (c *Command) BlockCluster() error {
 
 	addresses := c.Cluster.AllAddresses()
 
-	for _, nodeName := range c.Target.NodeNames {
-		err := addBlackholeRoutes(c.Target.Context, nodeName, addresses)
-		if err != nil {
-			return err
+	for _, target := range c.Targets {
+		for _, nodeName := range target.NodeNames {
+			err := addBlackholeRoutes(target.Context, nodeName, addresses)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
@@ -98,55 +107,71 @@ func (c *Command) UnblockCluster() error {
 
 	addresses := c.Cluster.AllAddresses()
 
-	for _, nodeName := range c.Target.NodeNames {
-		err := deleteBlackholeRoutes(c.Target.Context, nodeName, addresses)
-		if err != nil {
-			return err
+	for _, target := range c.Targets {
+		for _, nodeName := range target.NodeNames {
+			err := deleteBlackholeRoutes(target.Context, nodeName, addresses)
+			if err != nil {
+				return err
+			}
 		}
 	}
 
 	return nil
 }
 
-func (c *Command) ClusterStatus() (*ClusterStatus, error) {
+func (c *Command) ClusterStatus() (map[string]*ClusterStatus, error) {
 	// TODO: Run in parallel
 
 	addresses := c.Cluster.AllAddresses()
-	status := &ClusterStatus{
-		Valid: true,
-		Nodes: map[string]BlackholeStatus{},
+	res := map[string]*ClusterStatus{}
+
+	for _, target := range c.Targets {
+		status := &ClusterStatus{
+			Valid: true,
+			Nodes: map[string]BlackholeStatus{},
+		}
+		var lastStatus BlackholeStatus
+
+		for _, nodeName := range target.NodeNames {
+			routes, err := findBlackholeRoutes(target.Context, nodeName)
+			if err != nil {
+				return nil, err
+			}
+
+			if routes.HasAll(addresses...) {
+				status.Nodes[nodeName] = StatusBlocked
+			} else if routes.HasAny(addresses...) {
+				status.Nodes[nodeName] = StatusPartlyBlocked
+				status.Valid = false
+			} else {
+				status.Nodes[nodeName] = StatusUnblocked
+			}
+
+			if lastStatus != "" && lastStatus != status.Nodes[nodeName] {
+				status.Valid = false
+			}
+
+			lastStatus = status.Nodes[nodeName]
+		}
+
+		res[target.Context] = status
 	}
-	var lastStatus BlackholeStatus
 
-	for _, nodeName := range c.Target.NodeNames {
-		routes, err := findBlackholeRoutes(c.Target.Context, nodeName)
-		if err != nil {
-			return nil, err
-		}
-
-		if routes.HasAll(addresses...) {
-			status.Nodes[nodeName] = StatusBlocked
-		} else if routes.HasAny(addresses...) {
-			status.Nodes[nodeName] = StatusPartlyBlocked
-			status.Valid = false
-		} else {
-			status.Nodes[nodeName] = StatusUnblocked
-		}
-
-		if lastStatus != "" && lastStatus != status.Nodes[nodeName] {
-			status.Valid = false
-		}
-
-		lastStatus = status.Nodes[nodeName]
-	}
-
-	return status, nil
+	return res, nil
 }
 
-func validateContexts(blockedContext string, targeContext string) error {
-	if blockedContext == targetContext {
-		return fmt.Errorf("blocked cluster must be different from target cluster")
+func validateContexts(blockedContext string, targeContexts []string) error {
+	targets := sets.New(targeContexts...)
+
+	if len(targets) != len(targetContexts) {
+		return fmt.Errorf("duplicate contexts: %v", targetContexts)
 	}
+
+	if targets.Has(blockedContext) {
+		return fmt.Errorf("blocked cluster %q in target clusters %q",
+			blockedContext, targetContexts)
+	}
+
 	return nil
 }
 

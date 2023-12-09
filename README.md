@@ -23,8 +23,7 @@ CURRENT   NAME       CLUSTER                      AUTHINFO                      
 Making `cluster1` unreachable on clusters `hub` and `cluster2`:
 
 ```sh
-oc blackhole block cluster1 --context hub
-oc blackhole block cluster1 --context cluster2
+oc blackhole block cluster1 --contexts hub,cluster2
 ```
 
 Now can test how the system handles the unreachable cluster.
@@ -32,8 +31,7 @@ Now can test how the system handles the unreachable cluster.
 When done, we can make the cluster available again:
 
 ```sh
-oc blackhole unblock cluster1 --context hub
-oc blackhole unblock cluster1 --context cluster2
+oc blackhole unblock cluster1 --contexts hub,cluster2
 ```
 
 ## How a blackholed cluster looks like
