@@ -33,15 +33,15 @@ var showCmd = &cobra.Command{
 		}
 
 		fmt.Printf("status:\n")
-		fmt.Printf("  cluster: %q\n", blockedContext)
+		fmt.Printf("  cluster: %s\n", blockedContext)
 		fmt.Printf("  targets:\n")
 		for targetName, targetStatus := range status {
 			fmt.Printf("    - name: %s\n", targetName)
 			fmt.Printf("      valid: %v\n", targetStatus.Valid)
 			fmt.Printf("      nodes:\n")
 			for _, nodeName := range sortedKeys(targetStatus.Nodes) {
-				fmt.Printf("        - name: %q\n", nodeName)
-				fmt.Printf("          status: %q\n", targetStatus.Nodes[nodeName])
+				fmt.Printf("        - name: %s\n", nodeName)
+				fmt.Printf("          status: %s\n", targetStatus.Nodes[nodeName])
 			}
 		}
 	},
