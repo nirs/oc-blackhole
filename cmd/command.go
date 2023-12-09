@@ -66,20 +66,23 @@ func NewCommand(blockedContext string, targetContexts []string, kubeconfig strin
 }
 
 func (c *Command) InspectClusters() error {
-	var err error
+	errors := make(chan error)
 
-	// TODO: Run in parallel
+	go func() {
+		dbglog.Printf("Inspecting cluster %q ...", c.Cluster.Context)
+		errors <- c.Cluster.Inspect()
+	}()
 
-	dbglog.Printf("Inspecting cluster %q ...", c.Cluster.Context)
-	err = c.Cluster.Inspect()
-	if err != nil {
-		return err
+	for i := range c.Targets {
+		target := c.Targets[i]
+		go func() {
+			dbglog.Printf("Inspecting target %q ...", target.Context)
+			errors <- target.Inspect()
+		}()
 	}
 
-	for _, target := range c.Targets {
-		dbglog.Printf("Inspecting target %q ...", target.Context)
-		err = target.Inspect()
-		if err != nil {
+	for i := 0; i < len(c.Targets)+1; i += 1 {
+		if err := <-errors; err != nil {
 			return err
 		}
 	}
@@ -88,81 +91,134 @@ func (c *Command) InspectClusters() error {
 }
 
 func (c *Command) BlockCluster() error {
-	// TODO: Run in parallel
-
 	addresses := c.Cluster.AllAddresses()
+	errors := make(chan error)
+	count := 0
 
-	for _, target := range c.Targets {
+	for i := range c.Targets {
+		target := c.Targets[i]
 		dbglog.Printf("Blocking cluster %q in target %q ...", c.Cluster.Context, target.Context)
-		for _, nodeName := range target.NodeNames {
-			err := addBlackholeRoutes(target.Context, nodeName, addresses)
-			if err != nil {
-				return err
-			}
-			dbglog.Printf("Cluster %q blocked in node %q", c.Cluster.Context, nodeName)
+
+		for j := range target.NodeNames {
+			nodeName := target.NodeNames[j]
+			count += 1
+
+			go func() {
+				err := addBlackholeRoutes(target.Context, nodeName, addresses)
+				if err == nil {
+					dbglog.Printf("Cluster %q blocked in node %q", c.Cluster.Context, nodeName)
+				}
+				errors <- err
+			}()
 		}
 	}
 
-	return nil
+	return firstError(errors, count)
 }
 
 func (c *Command) UnblockCluster() error {
-	// TODO: Run in parallel
-
 	addresses := c.Cluster.AllAddresses()
+	errors := make(chan error)
+	count := 0
 
-	for _, target := range c.Targets {
+	for i := range c.Targets {
+		target := c.Targets[i]
 		dbglog.Printf("Unblocking cluster %q in target %q ...", c.Cluster.Context, target.Context)
-		for _, nodeName := range target.NodeNames {
-			err := deleteBlackholeRoutes(target.Context, nodeName, addresses)
-			if err != nil {
-				return err
-			}
-			dbglog.Printf("Cluster %q unblocked in node %q", c.Cluster.Context, nodeName)
+
+		for j := range target.NodeNames {
+			nodeName := target.NodeNames[j]
+			count += 1
+
+			go func() {
+				err := deleteBlackholeRoutes(target.Context, nodeName, addresses)
+				if err == nil {
+					dbglog.Printf("Cluster %q unblocked in node %q", c.Cluster.Context, nodeName)
+				}
+				errors <- err
+			}()
+		}
+	}
+
+	return firstError(errors, count)
+}
+
+func firstError(errors <-chan error, count int) error {
+	for i := 0; i < count; i += 1 {
+		if err := <-errors; err != nil {
+			return err
 		}
 	}
 
 	return nil
 }
 
-func (c *Command) ClusterStatus() (map[string]*ClusterStatus, error) {
-	// TODO: Run in parallel
+type Result struct {
+	Context string
+	Node    string
+	Routes  sets.Set[string]
+	Err     error
+}
 
-	addresses := c.Cluster.AllAddresses()
+func (c *Command) ClusterStatus() (map[string]*ClusterStatus, error) {
+	results := make(chan *Result)
+	count := 0
+
+	for i := range c.Targets {
+		target := c.Targets[i]
+		dbglog.Printf("Inspecting cluster %q status in target %q ...", c.Cluster.Context, target.Context)
+
+		for j := range target.NodeNames {
+			nodeName := target.NodeNames[j]
+			count += 1
+
+			go func() {
+				dbglog.Printf("Inspecting node %q ...", nodeName)
+				routes, err := findBlackholeRoutes(target.Context, nodeName)
+				results <- &Result{Context: target.Context, Node: nodeName, Routes: routes, Err: err}
+			}()
+		}
+	}
+
+	return c.collectResults(results, count)
+}
+
+func (c *Command) collectResults(results <-chan *Result, count int) (map[string]*ClusterStatus, error) {
 	res := map[string]*ClusterStatus{}
 
 	for _, target := range c.Targets {
-		dbglog.Printf("Inspecting cluster %q status in target %q ...", c.Cluster.Context, target.Context)
-		status := &ClusterStatus{
+		res[target.Context] = &ClusterStatus{
 			Valid: true,
 			Nodes: map[string]BlackholeStatus{},
 		}
-		var lastStatus BlackholeStatus
+	}
 
-		for _, nodeName := range target.NodeNames {
-			dbglog.Printf("Inspecting node %q ...", nodeName)
-			routes, err := findBlackholeRoutes(target.Context, nodeName)
-			if err != nil {
-				return nil, err
-			}
+	addresses := c.Cluster.AllAddresses()
 
-			if routes.HasAll(addresses...) {
-				status.Nodes[nodeName] = StatusBlocked
-			} else if routes.HasAny(addresses...) {
-				status.Nodes[nodeName] = StatusPartlyBlocked
-				status.Valid = false
-			} else {
-				status.Nodes[nodeName] = StatusUnblocked
-			}
-
-			if lastStatus != "" && lastStatus != status.Nodes[nodeName] {
-				status.Valid = false
-			}
-
-			lastStatus = status.Nodes[nodeName]
+	for i := 0; i < count; i += 1 {
+		result := <-results
+		if result.Err != nil {
+			return nil, result.Err
 		}
 
-		res[target.Context] = status
+		status := res[result.Context]
+		var newStatus BlackholeStatus
+
+		if result.Routes.HasAll(addresses...) {
+			newStatus = StatusBlocked
+		} else if result.Routes.HasAny(addresses...) {
+			newStatus = StatusPartlyBlocked
+			status.Valid = false
+		} else {
+			newStatus = StatusUnblocked
+		}
+
+		if lastStatus, ok := status.Nodes[result.Node]; ok {
+			if lastStatus != newStatus {
+				status.Valid = false
+			}
+		}
+
+		status.Nodes[result.Node] = newStatus
 	}
 
 	return res, nil
