@@ -70,12 +70,14 @@ func (c *Command) InspectClusters() error {
 
 	// TODO: Run in parallel
 
+	dbglog.Printf("Inspecting cluster %q ...", c.Cluster.Context)
 	err = c.Cluster.Inspect()
 	if err != nil {
 		return err
 	}
 
 	for _, target := range c.Targets {
+		dbglog.Printf("Inspecting target %q ...", target.Context)
 		err = target.Inspect()
 		if err != nil {
 			return err
@@ -91,11 +93,13 @@ func (c *Command) BlockCluster() error {
 	addresses := c.Cluster.AllAddresses()
 
 	for _, target := range c.Targets {
+		dbglog.Printf("Blocking cluster %q in target %q ...", c.Cluster.Context, target.Context)
 		for _, nodeName := range target.NodeNames {
 			err := addBlackholeRoutes(target.Context, nodeName, addresses)
 			if err != nil {
 				return err
 			}
+			dbglog.Printf("Cluster %q blocked in node %q", c.Cluster.Context, nodeName)
 		}
 	}
 
@@ -108,11 +112,13 @@ func (c *Command) UnblockCluster() error {
 	addresses := c.Cluster.AllAddresses()
 
 	for _, target := range c.Targets {
+		dbglog.Printf("Unblocking cluster %q in target %q ...", c.Cluster.Context, target.Context)
 		for _, nodeName := range target.NodeNames {
 			err := deleteBlackholeRoutes(target.Context, nodeName, addresses)
 			if err != nil {
 				return err
 			}
+			dbglog.Printf("Cluster %q unblocked in node %q", c.Cluster.Context, nodeName)
 		}
 	}
 
@@ -126,6 +132,7 @@ func (c *Command) ClusterStatus() (map[string]*ClusterStatus, error) {
 	res := map[string]*ClusterStatus{}
 
 	for _, target := range c.Targets {
+		dbglog.Printf("Inspecting cluster %q status in target %q ...", c.Cluster.Context, target.Context)
 		status := &ClusterStatus{
 			Valid: true,
 			Nodes: map[string]BlackholeStatus{},
@@ -133,6 +140,7 @@ func (c *Command) ClusterStatus() (map[string]*ClusterStatus, error) {
 		var lastStatus BlackholeStatus
 
 		for _, nodeName := range target.NodeNames {
+			dbglog.Printf("Inspecting node %q ...", nodeName)
 			routes, err := findBlackholeRoutes(target.Context, nodeName)
 			if err != nil {
 				return nil, err
