@@ -107,6 +107,8 @@ func execScript(context string, nodeName string, script string) ([]byte, error) 
 		"oc",
 		"debug",
 		"node/"+nodeName,
+		// Silence unhelpful informational messages
+		"--quiet",
 		"--context="+context,
 		"--",
 		"sh",
