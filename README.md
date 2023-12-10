@@ -26,7 +26,7 @@ Making `cluster1` unreachable on clusters `hub` and `cluster2`:
 oc blackhole block cluster1 --contexts hub,cluster2
 ```
 
-Now can test how the system handles the unreachable cluster.
+Now we can test how the system handles the unreachable cluster.
 
 When done, we can make the cluster reachable again:
 
