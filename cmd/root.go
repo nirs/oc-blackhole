@@ -13,6 +13,7 @@ import (
 var targetContexts []string
 var kubeconfig string
 var verbose bool
+var showProgress bool
 
 var example = `  # Make cluster 'foo' unreachable from clusters 'bar' and 'baz':
   oc blackhole block foo --contexts bar,baz
@@ -51,4 +52,6 @@ func init() {
 		"the kubeconfig file to use")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false,
 		"be more verbose")
+	rootCmd.PersistentFlags().BoolVarP(&showProgress, "progress", "p", false,
+		"show progress")
 }

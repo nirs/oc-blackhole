@@ -5,6 +5,8 @@ package cmd
 
 import (
 	"fmt"
+	"io"
+	"os"
 
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/client-go/tools/clientcmd"
@@ -29,12 +31,27 @@ type ClusterStatus struct {
 	Nodes map[string]BlackholeStatus
 }
 type Command struct {
-	Cluster *BlockedCluster
-	Targets []*TargetCluster
+	Cluster  *BlockedCluster
+	Targets  []*TargetCluster
+	progress *Progress
 }
 
-func NewCommand(blockedContext string, targetContexts []string, kubeconfig string) (*Command, error) {
+func NewCommand(blockedContext string, targetContexts []string, kubeconfig string, showProgress bool) (*Command, error) {
 	var err error
+
+	out := io.Discard
+	if showProgress {
+		out = os.Stderr
+	}
+
+	// We start with inderminate progress, since we don't know yet the number of nodes.
+	progress := NewProgress("setting up", 0, out)
+
+	defer func() {
+		if err != nil {
+			progress.Clear()
+		}
+	}()
 
 	err = validateContexts(blockedContext, targetContexts)
 	if err != nil {
@@ -61,11 +78,11 @@ func NewCommand(blockedContext string, targetContexts []string, kubeconfig strin
 		targets = append(targets, target)
 	}
 
-	command := &Command{Cluster: cluster, Targets: targets}
+	command := &Command{Cluster: cluster, Targets: targets, progress: progress}
 	return command, nil
 }
 
-func (c *Command) InspectClusters() error {
+func (c *Command) inspectClusters() error {
 	errors := make(chan error)
 
 	go func() {
@@ -91,9 +108,20 @@ func (c *Command) InspectClusters() error {
 }
 
 func (c *Command) BlockCluster() error {
+	defer c.progress.Clear()
+
+	c.progress.SetDescription("inspecting clusters")
+
+	if err := c.inspectClusters(); err != nil {
+		return err
+	}
+
+	tasks := c.targetNodeCount()
+	c.progress.SetTasks(uint(tasks))
+	c.progress.SetDescription("modifying nodes")
+
 	addresses := c.Cluster.AllAddresses()
 	errors := make(chan error)
-	count := 0
 
 	for i := range c.Targets {
 		target := c.Targets[i]
@@ -101,25 +129,36 @@ func (c *Command) BlockCluster() error {
 
 		for j := range target.NodeNames {
 			nodeName := target.NodeNames[j]
-			count += 1
 
 			go func() {
 				err := addBlackholeRoutes(target.Context, nodeName, addresses)
 				if err == nil {
 					dbglog.Printf("Cluster %q blocked in node %q", c.Cluster.Context, nodeName)
 				}
+				c.progress.Add(1)
 				errors <- err
 			}()
 		}
 	}
 
-	return firstError(errors, count)
+	return firstError(errors, tasks)
 }
 
 func (c *Command) UnblockCluster() error {
+	defer c.progress.Clear()
+
+	c.progress.SetDescription("inspecting clusters")
+
+	if err := c.inspectClusters(); err != nil {
+		return err
+	}
+
+	tasks := c.targetNodeCount()
+	c.progress.SetTasks(uint(tasks))
+	c.progress.SetDescription("modifying nodes")
+
 	addresses := c.Cluster.AllAddresses()
 	errors := make(chan error)
-	count := 0
 
 	for i := range c.Targets {
 		target := c.Targets[i]
@@ -127,19 +166,19 @@ func (c *Command) UnblockCluster() error {
 
 		for j := range target.NodeNames {
 			nodeName := target.NodeNames[j]
-			count += 1
 
 			go func() {
 				err := deleteBlackholeRoutes(target.Context, nodeName, addresses)
 				if err == nil {
 					dbglog.Printf("Cluster %q unblocked in node %q", c.Cluster.Context, nodeName)
 				}
+				c.progress.Add(1)
 				errors <- err
 			}()
 		}
 	}
 
-	return firstError(errors, count)
+	return firstError(errors, tasks)
 }
 
 func firstError(errors <-chan error, count int) error {
@@ -160,8 +199,19 @@ type Result struct {
 }
 
 func (c *Command) ClusterStatus() (map[string]*ClusterStatus, error) {
+	defer c.progress.Clear()
+
+	c.progress.SetDescription("inspecting clusters")
+
+	if err := c.inspectClusters(); err != nil {
+		return nil, err
+	}
+
+	tasks := c.targetNodeCount()
+	c.progress.SetTasks(uint(tasks))
+	c.progress.SetDescription("inspecting nodes")
+
 	results := make(chan *Result)
-	count := 0
 
 	for i := range c.Targets {
 		target := c.Targets[i]
@@ -169,17 +219,17 @@ func (c *Command) ClusterStatus() (map[string]*ClusterStatus, error) {
 
 		for j := range target.NodeNames {
 			nodeName := target.NodeNames[j]
-			count += 1
 
 			go func() {
 				dbglog.Printf("Inspecting node %q ...", nodeName)
 				routes, err := findBlackholeRoutes(target.Context, nodeName)
+				c.progress.Add(1)
 				results <- &Result{Context: target.Context, Node: nodeName, Routes: routes, Err: err}
 			}()
 		}
 	}
 
-	return c.collectResults(results, count)
+	return c.collectResults(results, tasks)
 }
 
 func (c *Command) collectResults(results <-chan *Result, count int) (map[string]*ClusterStatus, error) {
@@ -222,6 +272,14 @@ func (c *Command) collectResults(results <-chan *Result, count int) (map[string]
 	}
 
 	return res, nil
+}
+
+func (c *Command) targetNodeCount() int {
+	count := 0
+	for _, target := range c.Targets {
+		count += len(target.NodeNames)
+	}
+	return count
 }
 
 func validateContexts(blockedContext string, targeContexts []string) error {

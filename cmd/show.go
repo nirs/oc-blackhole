@@ -17,12 +17,7 @@ var showCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		blockedContext := args[0]
 
-		c, err := NewCommand(blockedContext, targetContexts, kubeconfig)
-		if err != nil {
-			errlog.Fatal(err)
-		}
-
-		err = c.InspectClusters()
+		c, err := NewCommand(blockedContext, targetContexts, kubeconfig, showProgress)
 		if err != nil {
 			errlog.Fatal(err)
 		}
