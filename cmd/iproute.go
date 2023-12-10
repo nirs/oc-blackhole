@@ -109,8 +109,12 @@ func execScript(context string, nodeName string, script string) ([]byte, error) 
 		"node/"+nodeName,
 		// Silence unhelpful informational messages
 		"--quiet",
+		// A tiny busybox image (1.6m) - we need only working `chroot`
+		"--image=quay.io/nirsof/busybox:stable-musl",
 		"--context="+context,
 		"--",
+		"chroot",
+		"/host",
 		"sh",
 		"-c",
 		script,
