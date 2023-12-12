@@ -8,6 +8,8 @@ SPDX-License-Identifier: Apache-2.0
 This is an oc plugin simulating cluster failures by making a cluster
 unreachable from other clusters.
 
+[![asciicast](https://asciinema.org/a/626178.svg)](https://asciinema.org/a/626178)
+
 ## Quick start
 
 Assuming a system with 3 clusters:
