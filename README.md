@@ -5,6 +5,8 @@ SPDX-License-Identifier: Apache-2.0
 
 # oc-blackhole
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/nirs/oc-blackhole.svg)](https://pkg.go.dev/github.com/nirs/oc-blackhole)
+
 This is an oc plugin simulating cluster failures by making a cluster
 unreachable from other clusters.
 
